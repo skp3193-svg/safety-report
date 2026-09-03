@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>안전교육일지 (공유/검토 기능 적용)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <!-- ============================================================
+         Firebase SDK (compat 버전 - 별도 빌드툴 없이 CDN으로 바로 사용)
+         ============================================================ -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root { --primary: #a50034; --bg-color: #f0f2f5; --card-bg: #ffffff; --text-main: #1d1d1f; --border: #d2d2d7; --point-blue: #007aff; --status-draft:#8e8e93; --status-sent:#ff9500; --status-done:#34c759; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Malgun Gothic', sans-serif; background: var(--bg-color); color: var(--text-main); padding-bottom: 110px; }
+        #loginScreen { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.4); z-index: 9999; display: flex; justify-content: center; align-items: center; }
+        .login-box { background: white; padding: 40px 30px; border-radius: 20px; width: 90%; max-width: 340px; text-align: center; }
+        .login-box input { width: 100%; padding: 14px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 12px; }
+        .login-btn { width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; }
+        .toolbar { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(255,255,255,0.97); padding: 10px 8px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 1000; border-top: 1px solid #eee; }
+        .toolbar button { padding: 10px 10px; font-size: 0.8rem; border: none; border-radius: 10px; background: #f0f2f5; font-weight: 650; cursor: pointer; flex: 1 1 auto; min-width: 70px; }
+        .btn-primary { background: var(--primary) !important; color: white !important; }
+        .btn-kakao { background: #fee500 !important; color: #191919 !important; }
+        .btn-review { background: var(--point-blue) !important; color: white !important; }
+        #reportContainer { padding: 15px 10px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        .page { background: var(--card-bg); width: 100%; max-width: 794px; padding: 20px 15px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
+        .doc-title { text-align: center; font-size: 1.5rem; font-weight: bold; color: var(--primary); padding-bottom: 10px; margin-bottom: 8px; border-bottom: 2px solid var(--primary); }
+        .status-bar { display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:16px; font-size:0.8rem; }
+        .status-badge { padding: 4px 12px; border-radius: 999px; color: white; font-weight: bold; }
+        .status-draft { background: var(--status-draft); }
+        .status-sent { background: var(--status-sent); }
+        .status-done { background: var(--status-done); }
+        .link-box { font-size: 0.75rem; color: #666; word-break: break-all; text-align:center; margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); margin-bottom: 14px; font-size: 0.85rem; }
+        th, td { border: 1px solid var(--border); padding: 8px 6px; vertical-align: middle; }
+        .label, th { background: #f8f9fa; font-weight: bold; text-align: center; }
+        .center { text-align: center; }
+        input[type=text], input[type=date] { width: 100%; border: 1px solid transparent; padding: 6px; font-size: 0.85rem; background: transparent; }
+        input[type=text]:focus, input[type=date]:focus { border: 1px solid var(--point-blue); background: #f0f8ff; outline: none; }
+        .section-title { font-weight: bold; background: #f8f9fa; padding: 10px 12px; margin: 20px 0 10px; border-radius: 8px; font-size: 0.9rem; border-left: 4px solid var(--primary); }
+        .sign-row-container { display: flex; align-items: center; gap: 6px; width: 100%; }
+        .sign-canvas { border: 1px dashed #bbb; background: #fff; border-radius: 4px; flex-grow: 1; height: 45px; cursor: crosshair; touch-action: none; }
+        .clear-sign-btn { font-size: 0.75rem; padding: 6px 8px; background: #e0e0e0; border: none; border-radius: 4px; cursor: pointer; }
+        .worktype-box { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+        .worktype-chip { display: flex; align-items: center; gap: 5px; background: #f8f9fa; border: 1px solid var(--border); border-radius: 20px; padding: 8px 14px; font-size: 0.85rem; cursor: pointer; transition: all 0.15s; }
+        .worktype-chip input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--primary); }
+        .worktype-chip.checked { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .company-confirm-box { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 14px; }
+        .company-confirm-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+        .company-confirm-row input[type=text] { border: 1px solid var(--border); border-radius: 6px; width: 140px; flex-shrink: 0; padding: 8px; }
+        .review-note { margin-top: 14px; }
+        .review-note textarea { width: 100%; min-height: 60px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-size: 0.85rem; font-family: inherit; }
+        .common-info { background:#f8f9fa; border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:14px; font-size:0.78rem; line-height:1.6; columns: 1; }
+        .common-info h4 { color: var(--primary); margin: 8px 0 2px; font-size:0.82rem; }
+        .common-info h4:first-child { margin-top:0; }
+        @media (min-width:600px) { .common-info { columns: 2; column-gap: 20px; } .common-info > div { break-inside: avoid; } }
+        .risk-check-row { display:flex; align-items:center; gap:18px; margin-bottom:14px; font-size:0.85rem; }
+        .risk-check-row label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+        .risk-check-row input[type=checkbox] { width:18px; height:18px; accent-color: var(--primary); }
+        .risk-hint { color:#888; font-size:0.75rem; }
+        .step-table th, .step-table td { font-size: 0.78rem; }
+        .step-table textarea { width:100%; border:1px solid transparent; background:transparent; font-size:0.78rem; font-family:inherit; resize:none; overflow:hidden; padding:4px; min-height:32px; }
+        .step-table textarea:focus { border:1px solid var(--point-blue); background:#f0f8ff; outline:none; }
+        .step-table input[type=checkbox] { width:18px; height:18px; accent-color: var(--primary); }
+        .add-step-btn { font-size:0.78rem; padding:6px 10px; background:#eee; border:none; border-radius:6px; cursor:pointer; margin-bottom:14px; }
+        .tbm-check-list { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; font-size:0.85rem; }
+        @media (min-width:600px) { .tbm-check-list { display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; } }
+        .tbm-check-list label { display:flex; align-items:flex-start; gap:6px; cursor:pointer; }
+        .tbm-check-list input[type=checkbox] { width:18px; height:18px; margin-top:1px; accent-color: var(--primary); flex-shrink:0; }
+        .sign-toolbar-row { display:flex; justify-content:flex-end; gap:6px; margin-bottom:8px; }
+        .sign-toolbar-row button { font-size:0.75rem; padding:6px 10px; border:none; border-radius:6px; cursor:pointer; color:#fff; }
+        .btn-add10 { background:#34c759; }
+        .btn-remove10 { background:#ff3b30; }
+        #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #1d1d1f; color: white; padding: 10px 18px; border-radius: 10px; font-size: 0.85rem; z-index: 10000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+        #toast.show { opacity: 0.95; }
+    </style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<div id="loginScreen">
+    <div class="login-box">
+        <h2>안전교육일지</h2>
+        <input type="text" id="loginId" placeholder="아이디">
+        <input type="password" id="loginPw" placeholder="비밀번호">
+        <button class="login-btn" onclick="doLogin()">로그인</button>
+    </div>
+</div>
+
+<div class="toolbar">
+    <button onclick="saveDraft()">💾 임시저장</button>
+    <button onclick="promptLoad()">📂 불러오기</button>
+    <button onclick="sendReport()" class="btn-primary">📤 발송(서명완료)</button>
+    <button onclick="shareLink()" class="btn-kakao">💬 링크공유</button>
+    <button onclick="markReviewed()" class="btn-review">✅ 검토완료</button>
+    <button onclick="saveAsPNG()">🖼️ PNG다운</button>
+</div>
+
+<div id="reportContainer">
+    <div class="page" id="page1">
+        <div class="doc-title">안 전 교 육 일 지</div>
+        <div class="status-bar">
+            <span id="statusBadge" class="status-badge status-draft">작성중</span>
+            <span id="statusMeta" style="color:#888;"></span>
+        </div>
+        <div id="linkBox" class="link-box" style="display:none;"></div>
+
+        <table>
+            <tr>
+                <td class="label">안전교육일</td>
+                <td><input type="date" id="eduDate"></td>
+                <td class="label">업체명</td>
+                <td><input type="text" id="company" placeholder="입력"></td>
+            </tr>
+            <tr>
+                <td class="label">작업개요</td>
+                <td colspan="3"><input type="text" id="workSummary" placeholder="작업개요 입력"></td>
+            </tr>
+        </table>
+
+        <div class="section-title">🛠️ 오늘 작업 종류</div>
+        <div class="worktype-box" id="workTypeBox">
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="일반">일반</label>
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="화기">화기</label>
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="밀폐">밀폐</label>
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="전기">전기</label>
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="고소">고소</label>
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="굴착 및 중장비">굴착 및 중장비</label>
+        </div>
+
+        <div class="section-title">📌 공통사항</div>
+        <div class="common-info">
+            <div>
+                <h4>0. 공통사항</h4>
+                (1) 주요 화학물질 MSDS 확인, 유해위험요소 사전인지<br>
+                (2) 안전수칙 준수, 안전하지 않으면 작업 금지<br>
+                (3) 위험성평가 위험요인·결과 숙지 후 안전작업<br>
+                (4) 지정장소 외 금연 (흡연장소: 복지관 앞 파고라)<br>
+                (5) 구내 차량 제한속도 10km/h 이하 운행<br>
+                (6) 정리정돈·청소 완료 후 담당자 확인받고 종료<br>
+                (7) 비상대피로·피난장소 숙지, 안전관리자 지시 준수<br>
+                (8) 비상시 우측 비상연락망 참고하여 즉시 조치<br>
+                (9) (정보보안) 무단 촬영·저장 등 정보유출 금지<br>
+                (10) (정보보안) 통제구역 임의출입·반출 금지
+                <h4>1. 화기작업</h4>
+                (1) 불티 비산으로 화재 발생하지 않도록 차단조치<br>
+                (2) 작업 전 가스농도 측정, 가연성물질 없음 확인
+            </div>
+            <div>
+                <h4>2. 밀폐공간 작업</h4>
+                (1) 공기질 측정결과 안전 확인 후 작업 허가<br>
+                (2) 입회자(감시인) 외부 상주, 출입인원 점검
+                <h4>3. 전기작업</h4>
+                (1) 전기시설 관련부서 협조·허가 후 작업 실시<br>
+                (2) 정전작업 원칙, 곤란시 활선 안전조치 후 작업
+                <h4>4. 고소작업</h4>
+                (1) 안전대 착용, 부착설비에 안전고리 걸고 작업<br>
+                (2) 작업 중 공기구 낙하하지 않도록 주의
+                <h4>5. 굴착 및 중장비 작업</h4>
+                (1) 매설물 확인, 작업구역·범위 정해 접근 차단<br>
+                (2) 작업 중단시 경계표주 등으로 출입제한 표시
+            </div>
+        </div>
+
+        <div class="section-title">⚠️ 위험성평가 실시여부</div>
+        <div class="risk-check-row">
+            <label><input type="checkbox" id="riskYes" onchange="toggleRiskCheck('yes')"> 실시</label>
+            <label><input type="checkbox" id="riskNo" onchange="toggleRiskCheck('no')"> 미실시</label>
+            <span class="risk-hint">(작업절차 마련, 최초 위험성평가 후 동일작업 시 해당)</span>
+        </div>
+
+        <div class="section-title">🔧 작업단계 구분 / 유해위험요인 / 안전조치 / 감소대책</div>
+        <table class="step-table">
+            <thead><tr><th style="width:32px;">구분</th><th style="width:16%;">작업단계</th><th>유해위험요인</th><th>현재 안전 조치</th><th>감소대책</th><th style="width:44px;"></th></tr></thead>
+            <tbody id="stepBody"></tbody>
+        </table>
+        <button class="add-step-btn" onclick="addStepRow()">+ 작업단계 추가</button>
+
+        <div class="section-title">📋 TBM 실시내용</div>
+        <div class="tbm-check-list" id="tbmCheckList">
+            <label><input type="checkbox" class="tbm-cb" checked value="위험성평가·작업지침 수립, 교육하였음">위험성평가·작업지침 수립, 교육하였음</label>
+            <label><input type="checkbox" class="tbm-cb" checked value="공정설비에 대한 위험성 설명하였음">공정설비에 대한 위험성 설명하였음</label>
+            <label><input type="checkbox" class="tbm-cb" checked value="연관 위험물질에 대한 위험성 설명하였음">연관 위험물질에 대한 위험성 설명하였음</label>
+            <label><input type="checkbox" class="tbm-cb" checked value="작업 전·후 정리정돈에 대하여 교육하였음">작업 전·후 정리정돈에 대하여 교육하였음</label>
+            <label><input type="checkbox" class="tbm-cb" checked value="정보보안에 대하여 교육하였음">정보보안에 대하여 교육하였음</label>
+        </div>
+
+        <div class="section-title">✍️ 교육 및 TBM 확인 (성명 + 서명)</div>
+        <div class="sign-toolbar-row">
+            <button class="btn-add10" onclick="changeSignCount(5)">+ 5명 추가</button>
+            <button class="btn-remove10" onclick="changeSignCount(-5)">- 5명 삭제</button>
+        </div>
+        <table>
+            <thead><tr><th style="width:40px;">No</th><th style="width:30%;">성명</th><th>서명</th></tr></thead>
+            <tbody id="signBody"></tbody>
+        </table>
+
+        <div class="section-title">🖊️ 공사업체 안전관리자 확인 (위험요인 확인 서명)</div>
+        <div class="company-confirm-box">
+            <div class="company-confirm-row">
+                <input type="text" id="companySignerName" placeholder="공사업체 안전관리자 성명">
+                <div class="sign-row-container">
+                    <canvas class="sign-canvas" id="companySign"></canvas>
+                    <button class="clear-sign-btn" onclick="clearCompanySign()">지우기</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-title">✅ 당사 안전관리자 재확인 서명</div>
+        <div class="company-confirm-box">
+            <div class="company-confirm-row">
+                <input type="text" id="reviewerSignerName" placeholder="당사 안전관리자 성명">
+                <div class="sign-row-container">
+                    <canvas class="sign-canvas" id="reviewerSign"></canvas>
+                    <button class="clear-sign-btn" onclick="clearReviewerSign()">지우기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ============================================================
+   1) Firebase 설정 — 아래 값을 본인 Firebase 프로젝트 값으로 교체하세요.
+      Firebase 콘솔(console.firebase.google.com) > 프로젝트 생성 >
+      Firestore Database 만들기(테스트 모드) > 웹 앱 추가 시 발급되는 값입니다.
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyAFBIfsgJyLXSRTG_O2evBVwU21HjPGaxQ",
+  authDomain: "safety-report-3a05b.firebaseapp.com",
+  projectId: "safety-report-3a05b",
+  storageBucket: "safety-report-3a05b.firebasestorage.app",
+  messagingSenderId: "36848180585",
+  appId: "1:36848180585:web:a77da51916b6d8ccc571f8"
+};
+let db = null;
+try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+} catch (e) {
+    console.error('Firebase 초기화 실패:', e);
+}
+const COLLECTION = "safety_reports";
+
+let currentDocId = null;
+let signPads = {};
+let signCount = 10;
+const MIN_SIGN_COUNT = 5;
+let stepRows = [];
+let stepIdSeq = 1;
+
+/* ---------------- 초기화 ---------------- */
+window.onload = () => {
+    document.getElementById('eduDate').value = new Date().toISOString().split('T')[0];
+    buildSignRows(signCount);
+    setupCompanySignPad();
+    setupReviewerSignPad();
+    setupWorkTypeChips();
+    stepRows = defaultStepRows();
+    renderStepRows();
+
+    // URL에 ?id=xxx 가 있으면 자동으로 해당 문서를 불러옴 (카톡/문자로 받은 링크 클릭 시)
+    const params = new URLSearchParams(location.search);
+    const idFromUrl = params.get('id');
+    if (idFromUrl) loadDoc(idFromUrl);
+};
+
+/* ---------------- 오늘 작업 종류 체크박스 ---------------- */
+function setupWorkTypeChips() {
+    document.querySelectorAll('.worktype-chip').forEach(chip => {
+        const cb = chip.querySelector('input');
+        cb.addEventListener('change', () => chip.classList.toggle('checked', cb.checked));
+    });
+}
+function collectWorkTypes() {
+    return Array.from(document.querySelectorAll('.worktype-cb:checked')).map(cb => cb.value);
+}
+function applyWorkTypes(list) {
+    if (!list) return;
+    document.querySelectorAll('.worktype-chip').forEach(chip => {
+        const cb = chip.querySelector('input');
+        cb.checked = list.includes(cb.value);
+        chip.classList.toggle('checked', cb.checked);
+    });
+}
+
+function doLogin() { document.getElementById('loginScreen').style.display = 'none'; }
+
+/* ---------------- 위험성평가 실시여부 ---------------- */
+function toggleRiskCheck(which) {
+    const yes = document.getElementById('riskYes'), no = document.getElementById('riskNo');
+    if (which === 'yes' && yes.checked) no.checked = false;
+    if (which === 'no' && no.checked) yes.checked = false;
+}
+function collectRiskAssessment() {
+    if (document.getElementById('riskYes').checked) return 'yes';
+    if (document.getElementById('riskNo').checked) return 'no';
+    return null;
+}
+function applyRiskAssessment(val) {
+    document.getElementById('riskYes').checked = (val === 'yes');
+    document.getElementById('riskNo').checked = (val === 'no');
+}
+
+/* ---------------- 작업단계 구분 / 유해위험요인 / 안전조치 / 감소대책 ---------------- */
+function defaultStepRows() {
+    return [
+        {id: stepIdSeq++, checked:true, step:'작업 전 준비 및 교육', hazard:'작업자 건강상태 불량 및 위험성 인식 부족 상해', measure:'작업자 컨디션 확인', reduction:'작업 부적합 인원 미투입'},
+        {id: stepIdSeq++, checked:true, step:'작업구역 설정', hazard:'작업자 외 인원 출입, 자재/공구장비 상해', measure:'장비/공구 작동상태·규격 확인', reduction:'필요 미부착 장비/공구 반출'},
+        {id: stepIdSeq++, checked:true, step:'수 작업_설비 반입', hazard:'설비 Casing 분리/해체시 손가락 협착', measure:'공도구·Chain Block 이용 서서히 분리', reduction:'해체 전 작업내용/방법 재확인 후 실시'},
+        {id: stepIdSeq++, checked:true, step:'수 작업_설비 지재 준비', hazard:'차량 적재·하차시 협착·끼임 인체 상해', measure:'협착/끼임 없도록 적정공구 사용', reduction:'손잡이·갈고리·진공빨판 등 보조도구 사용'},
+        {id: stepIdSeq++, checked:true, step:'정리정돈', hazard:'작업 후 정리정돈 미흡 전도 상해', measure:'Oil 즉시 제거, 폐기물 지정장소 폐기', reduction:''}
+    ];
+}
+function escapeHtml(str) {
+    return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function renderStepRows() {
+    const tbody = document.getElementById('stepBody');
+    tbody.innerHTML = stepRows.map(r => `
+        <tr data-id="${r.id}">
+            <td class="center"><input type="checkbox" ${r.checked?'checked':''} onchange="updateStepField(${r.id},'checked',this.checked)"></td>
+            <td><textarea oninput="updateStepField(${r.id},'step',this.value);autoGrow(this)">${escapeHtml(r.step)}</textarea></td>
+            <td><textarea oninput="updateStepField(${r.id},'hazard',this.value);autoGrow(this)">${escapeHtml(r.hazard)}</textarea></td>
+            <td><textarea oninput="updateStepField(${r.id},'measure',this.value);autoGrow(this)">${escapeHtml(r.measure)}</textarea></td>
+            <td><textarea oninput="updateStepField(${r.id},'reduction',this.value);autoGrow(this)">${escapeHtml(r.reduction)}</textarea></td>
+            <td class="center"><button class="clear-sign-btn" onclick="deleteStepRow(${r.id})">삭제</button></td>
+        </tr>`).join('');
+    tbody.querySelectorAll('textarea').forEach(autoGrow);
+}
+function autoGrow(el) {
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+}
+function updateStepField(id, field, value) {
+    const row = stepRows.find(r => r.id === id);
+    if (row) row[field] = value;
+}
+function addStepRow() {
+    stepRows.push({id: stepIdSeq++, checked:false, step:'', hazard:'', measure:'', reduction:''});
+    renderStepRows();
+}
+function deleteStepRow(id) {
+    stepRows = stepRows.filter(r => r.id !== id);
+    renderStepRows();
+}
+function collectStepRows() { return stepRows; }
+function applyStepRows(list) {
+    stepRows = (list && list.length) ? list.map(r => ({...r, id: stepIdSeq++})) : defaultStepRows();
+    renderStepRows();
+}
+
+/* ---------------- TBM 실시내용 체크리스트 ---------------- */
+function collectTbmChecked() {
+    return Array.from(document.querySelectorAll('.tbm-cb:checked')).map(cb => cb.value);
+}
+function applyTbmChecked(list) {
+    if (!list) return;
+    document.querySelectorAll('.tbm-cb').forEach(cb => { cb.checked = list.includes(cb.value); });
+}
+
+function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ---------------- 서명 패드 ---------------- */
+function buildSignRows(count) {
+    Object.keys(signPads).forEach(k => { if (!isNaN(k) && Number(k) > count) delete signPads[k]; });
+    const tbody = document.getElementById('signBody'); tbody.innerHTML = '';
+    for (let i = 1; i <= count; i++) {
+        tbody.innerHTML += `<tr><td class="center">${i}</td><td><input type="text" id="name${i}"></td><td><div class="sign-row-container"><canvas class="sign-canvas" id="sign${i}"></canvas><button class="clear-sign-btn" onclick="clearOneSign(${i})">지우기</button></div></td></tr>`;
+    }
+    setTimeout(() => { for (let i = 1; i <= count; i++) setupSignPad(i); }, 100);
+}
+function setupSignPad(id) {
+    const cv = document.getElementById('sign'+id); cv.width = cv.offsetWidth; cv.height = cv.offsetHeight;
+    const ctx = cv.getContext('2d'); let dr = false; signPads[id] = {canvas:cv, ctx:ctx};
+    const getP = e => { const r=cv.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return {x:cx-r.left, y:cy-r.top}; };
+    cv.onmousedown=cv.ontouchstart=e=>{e.preventDefault();dr=true;ctx.beginPath();ctx.moveTo(getP(e).x,getP(e).y);};
+    cv.onmousemove=cv.ontouchmove=e=>{if(!dr)return;e.preventDefault();ctx.lineTo(getP(e).x,getP(e).y);ctx.stroke();};
+    cv.onmouseup=cv.ontouchend=()=>{dr=false;};
+}
+function clearOneSign(id) { if(signPads[id]) signPads[id].ctx.clearRect(0,0,signPads[id].canvas.width,signPads[id].canvas.height); }
+
+/* 서명 인원수 +10/-10 (기존 입력값은 보존) */
+function changeSignCount(delta) {
+    const savedNames = {}, savedSigs = {};
+    for (let i = 1; i <= signCount; i++) {
+        const nameEl = document.getElementById('name'+i);
+        if (nameEl) savedNames[i] = nameEl.value;
+        if (signPads[i]) savedSigs[i] = signPads[i].canvas.toDataURL('image/png');
+    }
+    signCount = Math.max(MIN_SIGN_COUNT, signCount + delta);
+    buildSignRows(signCount);
+    setTimeout(() => {
+        Object.keys(savedNames).forEach(i => {
+            if (Number(i) <= signCount) {
+                const el = document.getElementById('name'+i);
+                if (el) el.value = savedNames[i];
+            }
+        });
+        Object.keys(savedSigs).forEach(i => {
+            if (Number(i) <= signCount && signPads[i]) {
+                const img = new Image();
+                img.onload = () => signPads[i].ctx.drawImage(img, 0, 0, signPads[i].canvas.width, signPads[i].canvas.height);
+                img.src = savedSigs[i];
+            }
+        });
+    }, 160);
+}
+
+/* 공사업체 확인자 서명패드 (TBM 서명 목록과는 별도) */
+function setupCompanySignPad() {
+    const cv = document.getElementById('companySign'); cv.width = cv.offsetWidth; cv.height = cv.offsetHeight;
+    const ctx = cv.getContext('2d'); let dr = false; signPads['company'] = {canvas:cv, ctx:ctx};
+    const getP = e => { const r=cv.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return {x:cx-r.left, y:cy-r.top}; };
+    cv.onmousedown=cv.ontouchstart=e=>{e.preventDefault();dr=true;ctx.beginPath();ctx.moveTo(getP(e).x,getP(e).y);};
+    cv.onmousemove=cv.ontouchmove=e=>{if(!dr)return;e.preventDefault();ctx.lineTo(getP(e).x,getP(e).y);ctx.stroke();};
+    cv.onmouseup=cv.ontouchend=()=>{dr=false;};
+}
+function clearCompanySign() { if(signPads['company']) signPads['company'].ctx.clearRect(0,0,signPads['company'].canvas.width,signPads['company'].canvas.height); }
+
+/* 당사 안전관리자 재확인 서명패드 */
+function setupReviewerSignPad() {
+    const cv = document.getElementById('reviewerSign'); cv.width = cv.offsetWidth; cv.height = cv.offsetHeight;
+    const ctx = cv.getContext('2d'); let dr = false; signPads['reviewer'] = {canvas:cv, ctx:ctx};
+    const getP = e => { const r=cv.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return {x:cx-r.left, y:cy-r.top}; };
+    cv.onmousedown=cv.ontouchstart=e=>{e.preventDefault();dr=true;ctx.beginPath();ctx.moveTo(getP(e).x,getP(e).y);};
+    cv.onmousemove=cv.ontouchmove=e=>{if(!dr)return;e.preventDefault();ctx.lineTo(getP(e).x,getP(e).y);ctx.stroke();};
+    cv.onmouseup=cv.ontouchend=()=>{dr=false;};
+}
+function clearReviewerSign() { if(signPads['reviewer']) signPads['reviewer'].ctx.clearRect(0,0,signPads['reviewer'].canvas.width,signPads['reviewer'].canvas.height); }
+
+/* 서명을 base64 PNG로 변환해서 저장/복원 가능하게 함 (TBM 목록 + 공사업체 확인 서명 모두 포함) */
+function collectSignatures() {
+    const sigs = {};
+    Object.keys(signPads).forEach(key => {
+        sigs[key] = signPads[key].canvas.toDataURL('image/png');
+    });
+    return sigs;
+}
+function restoreSignatures(sigs) {
+    if (!sigs) return;
+    Object.keys(sigs).forEach(i => {
+        const pad = signPads[i];
+        if (!pad) return;
+        const img = new Image();
+        img.onload = () => pad.ctx.drawImage(img, 0, 0, pad.canvas.width, pad.canvas.height);
+        img.src = sigs[i];
+    });
+}
+
+/* ---------------- 데이터 수집/복원 ---------------- */
+function collectFormData() {
+    const names = {};
+    for (let i = 1; i <= signCount; i++) { const el = document.getElementById('name'+i); if (el) names[i] = el.value; }
+    return {
+        eduDate: document.getElementById('eduDate').value,
+        company: document.getElementById('company').value,
+        workSummary: document.getElementById('workSummary').value,
+        workTypes: collectWorkTypes(),
+        riskAssessment: collectRiskAssessment(),
+        stepRows: collectStepRows(),
+        tbmChecked: collectTbmChecked(),
+        signCount: signCount,
+        companySignerName: document.getElementById('companySignerName').value,
+        reviewerSignerName: document.getElementById('reviewerSignerName').value,
+        names: names,
+        signatures: collectSignatures()
+    };
+}
+function applyFormData(data) {
+    if (!data) return;
+    document.getElementById('eduDate').value = data.eduDate || '';
+    document.getElementById('company').value = data.company || '';
+    document.getElementById('workSummary').value = data.workSummary || '';
+    document.getElementById('companySignerName').value = data.companySignerName || '';
+    document.getElementById('reviewerSignerName').value = data.reviewerSignerName || '';
+    applyWorkTypes(data.workTypes);
+    applyRiskAssessment(data.riskAssessment);
+    applyStepRows(data.stepRows);
+    applyTbmChecked(data.tbmChecked);
+    signCount = data.signCount || MIN_SIGN_COUNT;
+    buildSignRows(signCount);
+    setTimeout(() => {
+        if (data.names) Object.keys(data.names).forEach(i => {
+            const el = document.getElementById('name'+i);
+            if (el) el.value = data.names[i];
+        });
+        restoreSignatures(data.signatures);
+    }, 160);
+}
+
+/* ---------------- 상태 표시 ---------------- */
+function setStatusUI(status, meta) {
+    const badge = document.getElementById('statusBadge');
+    const map = { draft: ['작성중','status-draft'], sent: ['발송됨(서명완료)','status-sent'], reviewed: ['검토완료','status-done'] };
+    const [label, cls] = map[status] || map.draft;
+    badge.textContent = label;
+    badge.className = 'status-badge ' + cls;
+    document.getElementById('statusMeta').textContent = meta || '';
+}
+function showLinkBox(url) {
+    const box = document.getElementById('linkBox');
+    box.style.display = 'block';
+    box.textContent = '공유 링크: ' + url;
+}
+
+/* ---------------- Firestore 저장/불러오기 ---------------- */
+async function saveDraft() {
+    await persist('draft');
+    toast('임시 저장되었습니다.');
+}
+
+// 1) 공사업체: 위험요인 확인 후 안전관리자가 개인 서명 → "발송" — 상태를 sent로 저장하고 공유 링크 생성
+async function sendReport() {
+    const companySign = signPads['company'];
+    const isBlank = companySign && isCanvasBlank(companySign.canvas);
+    if (!document.getElementById('companySignerName').value || isBlank) {
+        toast('공사업체 안전관리자 성명과 위험요인 확인 서명을 입력해주세요.');
+        return;
+    }
+    await persist('sent');
+    const url = buildShareUrl(currentDocId);
+    showLinkBox(url);
+    toast('발송 처리되었습니다. 링크를 공유해주세요.');
+}
+
+// 2) 안전관리자: 위험요인 확인 서명 이후 재확인 서명 후 상태를 reviewed로 확정 저장
+async function markReviewed() {
+    if (!currentDocId) { toast('먼저 불러오기로 문서를 여세요.'); return; }
+    const reviewerSign = signPads['reviewer'];
+    const isBlank = reviewerSign && isCanvasBlank(reviewerSign.canvas);
+    if (!document.getElementById('reviewerSignerName').value || isBlank) {
+        toast('당사 안전관리자 성명과 재확인 서명을 입력해주세요.');
+        return;
+    }
+    await persist('reviewed');
+    toast('재확인 서명 완료로 저장되었습니다.');
+}
+function isCanvasBlank(canvas) {
+    const ctx = canvas.getContext('2d');
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < pixels.length; i += 4) { if (pixels[i] !== 0) return false; }
+    return true;
+}
+
+async function persist(status) {
+    if (!db) { toast('Firebase에 연결되지 않았습니다. firebaseConfig 설정을 확인하세요.'); return; }
+    const data = collectFormData();
+    data.status = status;
+    data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    try {
+        if (currentDocId) {
+            await db.collection(COLLECTION).doc(currentDocId).set(data, { merge: true });
+        } else {
+            data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            const ref = await db.collection(COLLECTION).add(data);
+            currentDocId = ref.id;
+        }
+        setStatusUI(status, currentDocId ? ('문서ID: ' + currentDocId) : '');
+    } catch (err) {
+        console.error(err);
+        toast('저장 실패: Firebase 설정을 확인하세요.');
+    }
+}
+
+function promptLoad() {
+    const id = prompt('불러올 문서 ID를 입력하세요 (링크의 ?id= 뒷부분)');
+    if (id) loadDoc(id.trim());
+}
+
+async function loadDoc(id) {
+    if (!db) { toast('Firebase에 연결되지 않았습니다. firebaseConfig 설정을 확인하세요.'); return; }
+    try {
+        const snap = await db.collection(COLLECTION).doc(id).get();
+        if (!snap.exists) { toast('문서를 찾을 수 없습니다.'); return; }
+        const data = snap.data();
+        currentDocId = id;
+        applyFormData(data);
+        setStatusUI(data.status || 'draft', '문서ID: ' + id);
+        if (data.status === 'sent' || data.status === 'reviewed') showLinkBox(buildShareUrl(id));
+        toast('문서를 불러왔습니다.');
+    } catch (err) {
+        console.error(err);
+        toast('불러오기 실패: Firebase 설정을 확인하세요.');
+    }
+}
+
+function buildShareUrl(id) {
+    const base = location.origin + location.pathname;
+    return base + '?id=' + id;
+}
+
+/* ---------------- 공유 (카톡/문자) ---------------- */
+async function shareLink() {
+    if (!currentDocId) { toast('먼저 "발송" 버튼으로 저장하세요.'); return; }
+    const url = buildShareUrl(currentDocId);
+    const title = '안전교육일지 - ' + (document.getElementById('company').value || '');
+
+    if (navigator.share) {
+        // 모바일에서 호출 시 카카오톡/문자/기타 앱이 포함된 공유시트가 뜸
+        try {
+            await navigator.share({ title: title, text: '안전교육일지를 확인해주세요.', url: url });
+            return;
+        } catch (e) { /* 사용자가 취소한 경우 등은 무시하고 아래 fallback으로 */ }
+    }
+    // Web Share 미지원 브라우저(PC 등) 대비 — 클립보드 복사 + 문자 공유 링크 제공
+    try {
+        await navigator.clipboard.writeText(url);
+        toast('링크가 복사되었습니다. 카톡/문자에 붙여넣어 전송하세요.');
+    } catch (e) {
+        showLinkBox(url);
+    }
+}
+
+/* ---------------- PNG 다운로드 ---------------- */
+function saveAsPNG() {
+    const eduDate = document.getElementById('eduDate').value || '날짜미상';
+    const companyName = document.getElementById('company').value || '업체명미상';
+    const fileName = `${eduDate}.${companyName}.안전일지.png`;
+
+    html2canvas(document.getElementById('page1'), { scale: 2 }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+}
+</script>
+
+</body>
+</html>
