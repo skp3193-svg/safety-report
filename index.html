@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>안전교육일지 (공유/검토 기능 적용)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
     <!-- ============================================================
          Firebase SDK (compat 버전 - 별도 빌드툴 없이 CDN으로 바로 사용)
@@ -16,12 +17,12 @@
         :root { --primary: #a50034; --bg-color: #f0f2f5; --card-bg: #ffffff; --text-main: #1d1d1f; --border: #d2d2d7; --point-blue: #007aff; --status-draft:#8e8e93; --status-sent:#ff9500; --status-done:#34c759; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Malgun Gothic', sans-serif; background: var(--bg-color); color: var(--text-main); padding-bottom: 110px; }
-        #loginScreen { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.4); z-index: 9999; display: flex; justify-content: center; align-items: center; }
-        .login-box { background: white; padding: 40px 30px; border-radius: 20px; width: 90%; max-width: 340px; text-align: center; }
-        .login-box input { width: 100%; padding: 14px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 12px; }
-        .login-btn { width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; }
         .toolbar { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(255,255,255,0.97); padding: 10px 8px; display: flex; flex-wrap: wrap; gap: 6px; z-index: 1000; border-top: 1px solid #eee; }
-        .toolbar button { padding: 10px 10px; font-size: 0.8rem; border: none; border-radius: 10px; background: #f0f2f5; font-weight: 650; cursor: pointer; flex: 1 1 auto; min-width: 70px; }
+        .toolbar button { padding: 10px 10px; font-size: 0.8rem; border: none; border-radius: 10px; background: #f0f2f5; font-weight: 650; cursor: pointer; flex: 1 1 30%; min-width: 70px; }
+        @media (max-width: 420px) {
+            .toolbar { padding: 8px 6px; gap: 5px; }
+            .toolbar button { flex: 1 1 30%; padding: 9px 4px; font-size: 0.72rem; }
+        }
         .btn-primary { background: var(--primary) !important; color: white !important; }
         .btn-kakao { background: #fee500 !important; color: #191919 !important; }
         .btn-review { background: var(--point-blue) !important; color: white !important; }
@@ -62,6 +63,8 @@
         .risk-check-row input[type=checkbox] { width:18px; height:18px; accent-color: var(--primary); }
         .risk-hint { color:#888; font-size:0.75rem; }
         .step-table th, .step-table td { font-size: 0.78rem; }
+        .step-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 6px; }
+        .step-table { min-width: 640px; }
         .step-table textarea { width:100%; border:1px solid transparent; background:transparent; font-size:0.78rem; font-family:inherit; resize:none; overflow:hidden; padding:4px; min-height:32px; }
         .step-table textarea:focus { border:1px solid var(--point-blue); background:#f0f8ff; outline:none; }
         .step-table input[type=checkbox] { width:18px; height:18px; accent-color: var(--primary); }
@@ -74,6 +77,12 @@
         .sign-toolbar-row button { font-size:0.75rem; padding:6px 10px; border:none; border-radius:6px; cursor:pointer; color:#fff; }
         .btn-add10 { background:#34c759; }
         .btn-remove10 { background:#ff3b30; }
+        .load-list-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px; }
+        .load-list-box { background:#fff; border-radius:14px; max-width:420px; width:100%; max-height:75vh; overflow-y:auto; padding:16px; }
+        .load-list-box h3 { margin-bottom:10px; color: var(--primary); }
+        .load-list-item { padding:12px 6px; border-bottom:1px solid #eee; cursor:pointer; font-size:0.85rem; }
+        .load-list-item span { color:#888; font-size:0.78rem; }
+        .load-list-close { margin-top:10px; padding:10px; width:100%; border:none; border-radius:8px; background:#eee; font-weight:bold; }
         #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #1d1d1f; color: white; padding: 10px 18px; border-radius: 10px; font-size: 0.85rem; z-index: 10000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
         #toast.show { opacity: 0.95; }
     </style>
@@ -82,22 +91,13 @@
 
 <div id="toast"></div>
 
-<div id="loginScreen">
-    <div class="login-box">
-        <h2>안전교육일지</h2>
-        <input type="text" id="loginId" placeholder="아이디">
-        <input type="password" id="loginPw" placeholder="비밀번호">
-        <button class="login-btn" onclick="doLogin()">로그인</button>
-    </div>
-</div>
-
 <div class="toolbar">
     <button onclick="saveDraft()">💾 임시저장</button>
     <button onclick="promptLoad()">📂 불러오기</button>
     <button onclick="sendReport()" class="btn-primary">📤 발송(서명완료)</button>
     <button onclick="shareLink()" class="btn-kakao">💬 링크공유</button>
     <button onclick="markReviewed()" class="btn-review">✅ 검토완료</button>
-    <button onclick="saveAsPNG()">🖼️ PNG다운</button>
+    <button onclick="saveAsPDF()">📄 PDF다운</button>
 </div>
 
 <div id="reportContainer">
@@ -106,6 +106,7 @@
         <div class="status-bar">
             <span id="statusBadge" class="status-badge status-draft">작성중</span>
             <span id="statusMeta" style="color:#888;"></span>
+            <button id="viewSavedPdfBtn" onclick="viewSavedPdf()" style="display:none;font-size:0.75rem;padding:4px 10px;border:none;border-radius:999px;background:var(--point-blue);color:#fff;">📄 저장된 PDF 보기</button>
         </div>
         <div id="linkBox" class="link-box" style="display:none;"></div>
 
@@ -174,10 +175,12 @@
         </div>
 
         <div class="section-title">🔧 작업단계 구분 / 유해위험요인 / 안전조치 / 감소대책</div>
+        <div class="step-table-wrap">
         <table class="step-table">
             <thead><tr><th style="width:32px;">구분</th><th style="width:16%;">작업단계</th><th>유해위험요인</th><th>현재 안전 조치</th><th>감소대책</th><th style="width:44px;"></th></tr></thead>
             <tbody id="stepBody"></tbody>
         </table>
+        </div>
         <button class="add-step-btn" onclick="addStepRow()">+ 작업단계 추가</button>
 
         <div class="section-title">📋 TBM 실시내용</div>
@@ -247,6 +250,7 @@ try {
 const COLLECTION = "safety_reports";
 
 let currentDocId = null;
+let currentPdfBase64 = null;
 let signPads = {};
 let signCount = 10;
 const MIN_SIGN_COUNT = 5;
@@ -288,7 +292,6 @@ function applyWorkTypes(list) {
     });
 }
 
-function doLogin() { document.getElementById('loginScreen').style.display = 'none'; }
 
 /* ---------------- 위험성평가 실시여부 ---------------- */
 function toggleRiskCheck(which) {
@@ -543,7 +546,36 @@ async function markReviewed() {
         return;
     }
     await persist('reviewed');
-    toast('재확인 서명 완료로 저장되었습니다.');
+    toast('검토완료 저장 중... PDF 보관 준비 중입니다.');
+    await savePdfToServer();
+}
+async function savePdfToServer() {
+    if (!db || !currentDocId) return;
+    try {
+        const pdf = await generatePdfDataUri(1.3);
+        const base64 = pdf.output('datauristring').split(',')[1];
+        if (base64.length > 700000) {
+            toast('검토완료로 저장됐지만, PDF 용량이 커서 서버 보관은 생략됐습니다. PDF다운으로 따로 보관해주세요.');
+            return;
+        }
+        await db.collection(COLLECTION).doc(currentDocId).set(
+            { pdfBase64: base64, pdfSavedAt: firebase.firestore.FieldValue.serverTimestamp() },
+            { merge: true }
+        );
+        currentPdfBase64 = base64;
+        document.getElementById('viewSavedPdfBtn').style.display = 'inline-block';
+        toast('검토완료 저장 + PDF 서버 보관까지 완료됐습니다.');
+    } catch (e) {
+        console.error(e);
+        toast('검토완료는 저장됐지만 PDF 서버 보관 중 오류가 발생했습니다.');
+    }
+}
+function viewSavedPdf() {
+    if (!currentPdfBase64) return;
+    const link = document.createElement('a');
+    link.href = 'data:application/pdf;base64,' + currentPdfBase64;
+    link.download = buildFileName('pdf');
+    link.click();
 }
 function isCanvasBlank(canvas) {
     const ctx = canvas.getContext('2d');
@@ -572,9 +604,40 @@ async function persist(status) {
     }
 }
 
-function promptLoad() {
-    const id = prompt('불러올 문서 ID를 입력하세요 (링크의 ?id= 뒷부분)');
-    if (id) loadDoc(id.trim());
+async function promptLoad() {
+    if (!db) { toast('Firebase에 연결되지 않았습니다. firebaseConfig 설정을 확인하세요.'); return; }
+    try {
+        const snap = await db.collection(COLLECTION).orderBy('createdAt', 'desc').limit(20).get();
+        if (snap.empty) { toast('저장된 문서가 없습니다.'); return; }
+        showLoadList(snap.docs);
+    } catch (err) {
+        console.error(err);
+        toast('목록을 불러오지 못했습니다.');
+    }
+}
+function showLoadList(docs) {
+    const overlay = document.createElement('div');
+    overlay.className = 'load-list-overlay';
+    const box = document.createElement('div');
+    box.className = 'load-list-box';
+    box.innerHTML = '<h3>불러올 문서 선택</h3>';
+    const statusMap = { draft: '작성중', sent: '발송됨', reviewed: '검토완료' };
+    docs.forEach(d => {
+        const data = d.data();
+        const item = document.createElement('div');
+        item.className = 'load-list-item';
+        item.innerHTML = `<b>${escapeHtml(data.eduDate || '')} · ${escapeHtml(data.company || '업체명 없음')}</b><br><span>${statusMap[data.status] || '작성중'}</span>`;
+        item.onclick = () => { document.body.removeChild(overlay); loadDoc(d.id); };
+        box.appendChild(item);
+    });
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'load-list-close';
+    closeBtn.textContent = '닫기';
+    closeBtn.onclick = () => document.body.removeChild(overlay);
+    box.appendChild(closeBtn);
+    overlay.appendChild(box);
+    overlay.onclick = (e) => { if (e.target === overlay) document.body.removeChild(overlay); };
+    document.body.appendChild(overlay);
 }
 
 async function loadDoc(id) {
@@ -587,6 +650,8 @@ async function loadDoc(id) {
         applyFormData(data);
         setStatusUI(data.status || 'draft', '문서ID: ' + id);
         if (data.status === 'sent' || data.status === 'reviewed') showLinkBox(buildShareUrl(id));
+        currentPdfBase64 = data.pdfBase64 || null;
+        document.getElementById('viewSavedPdfBtn').style.display = currentPdfBase64 ? 'inline-block' : 'none';
         toast('문서를 불러왔습니다.');
     } catch (err) {
         console.error(err);
@@ -621,18 +686,27 @@ async function shareLink() {
     }
 }
 
-/* ---------------- PNG 다운로드 ---------------- */
-function saveAsPNG() {
+/* ---------------- PDF 생성/다운로드 ---------------- */
+async function generatePdfDataUri(scale) {
+    const canvas = await html2canvas(document.getElementById('page1'), { scale: scale || 2 });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+    });
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+    return pdf;
+}
+function buildFileName(ext) {
     const eduDate = document.getElementById('eduDate').value || '날짜미상';
     const companyName = document.getElementById('company').value || '업체명미상';
-    const fileName = `${eduDate}.${companyName}.안전일지.png`;
-
-    html2canvas(document.getElementById('page1'), { scale: 2 }).then(canvas => {
-        const link = document.createElement('a');
-        link.download = fileName;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-    });
+    return `${eduDate}.${companyName}.안전일지.${ext}`;
+}
+async function saveAsPDF() {
+    toast('PDF 생성 중입니다...');
+    const pdf = await generatePdfDataUri(2);
+    pdf.save(buildFileName('pdf'));
 }
 </script>
 
