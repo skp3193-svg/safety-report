@@ -92,6 +92,11 @@
 
 <div id="toast"></div>
 
+<div id="inAppBanner" style="display:none;position:fixed;top:0;left:0;width:100%;background:#ffeb3b;color:#000;padding:10px 12px;z-index:10002;text-align:center;font-size:0.85rem;box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+    카카오톡 브라우저에서는 PDF 저장이 제한됩니다.
+    <button onclick="openInExternalBrowser()" style="margin-left:6px;padding:6px 12px;border:none;border-radius:6px;background:#000;color:#fff;font-weight:bold;">외부 브라우저로 열기</button>
+</div>
+
 <div id="loadingOverlay">
     <div class="loading-box">
         <div class="hourglass">⏳</div>
@@ -269,11 +274,25 @@ window.onload = () => {
     stepRows = defaultStepRows();
     renderStepRows();
     renderCommonInfo();
+    checkInAppBrowser();
 
     const params = new URLSearchParams(location.search);
     const idFromUrl = params.get('id');
     if (idFromUrl) loadDoc(idFromUrl);
 };
+
+/* ---------------- 카카오톡 인앱 브라우저 감지 및 외부 브라우저 전환 ---------------- */
+function checkInAppBrowser() {
+    const ua = navigator.userAgent || '';
+    if (/KAKAOTALK/i.test(ua)) {
+        document.getElementById('inAppBanner').style.display = 'block';
+        document.body.style.paddingTop = '54px';
+    }
+}
+function openInExternalBrowser() {
+    const url = location.href;
+    location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(url);
+}
 
 function showLoading(text) {
     document.getElementById('loadingText').textContent = text || '처리 중입니다...';
@@ -707,4 +726,3 @@ async function viewPdf() {
 
 </body>
 </html>
-
