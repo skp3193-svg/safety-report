@@ -733,7 +733,19 @@ function buildShareUrl(id) {
 }
 
 async function generatePdf(scale) {
-    const canvas = await html2canvas(document.getElementById('page1'), { scale: scale || 2, useCORS:true });
+    // 작업단계 표는 폰에서 좌우 스크롤로 보게 돼있어, 캡처 시 잘리지 않도록 잠시 스크롤 제한을 풉니다.
+    const wrap = document.querySelector('.step-table-wrap');
+    const prevOverflow = wrap ? wrap.style.overflow : null;
+    if (wrap) wrap.style.overflow = 'visible';
+
+    const canvas = await html2canvas(document.getElementById('page1'), {
+        scale: scale || 2,
+        useCORS: true,
+        windowWidth: 900   // 폰 화면 너비 대신 PC 화면 너비 기준으로 넓게 캡처
+    });
+
+    if (wrap) wrap.style.overflow = prevOverflow;
+
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
