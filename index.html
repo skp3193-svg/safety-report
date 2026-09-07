@@ -738,12 +738,25 @@ async function generatePdf(scale) {
     const prevOverflow = wrap ? wrap.style.overflow : null;
     if (wrap) wrap.style.overflow = 'visible';
 
+    // 성명도 없고 서명도 안 한 빈 줄은 PDF에서만 숨겨서 페이지 수를 줄입니다.
+    const hiddenRows = [];
+    for (let i = 1; i <= signCount; i++) {
+        const nameEl = document.getElementById('name' + i);
+        const pad = signPads[i];
+        const isEmpty = (!nameEl || !nameEl.value.trim()) && (!pad || isCanvasBlank(pad.canvas));
+        if (isEmpty && nameEl) {
+            const row = nameEl.closest('tr');
+            if (row) { row.style.display = 'none'; hiddenRows.push(row); }
+        }
+    }
+
     const canvas = await html2canvas(document.getElementById('page1'), {
         scale: scale || 2,
         useCORS: true,
         windowWidth: 900   // 폰 화면 너비 대신 PC 화면 너비 기준으로 넓게 캡처
     });
 
+    hiddenRows.forEach(row => { row.style.display = ''; });
     if (wrap) wrap.style.overflow = prevOverflow;
 
     const { jsPDF } = window.jspdf;
