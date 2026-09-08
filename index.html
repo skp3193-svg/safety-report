@@ -1,3 +1,750 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>안전교육일지</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon-192.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="theme-color" content="#a50034">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="안전일지">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <style>
+        :root { --primary: #a50034; --bg-color: #f0f2f5; --card-bg: #ffffff; --text-main: #1d1d1f; --border: #d2d2d7; --point-blue: #007aff; --status-draft:#8e8e93; --status-sent:#ff9500; --status-done:#34c759; }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Malgun Gothic', -apple-system, sans-serif; background: var(--bg-color); color: var(--text-main); padding-bottom: 115px; -webkit-text-size-adjust: 100%; }
+        .toolbar { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(255,255,255,0.98); padding: 10px 8px calc(10px + env(safe-area-inset-bottom)); display: flex; flex-wrap: wrap; gap: 6px; z-index: 1000; border-top: 1px solid #eee; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
+        .toolbar button { padding: 11px 8px; font-size: 0.82rem; border: none; border-radius: 10px; background: #f0f2f5; font-weight: 650; cursor: pointer; flex: 1 1 0; min-width: 90px; }
+        .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
+        @media (max-width: 420px) {
+            .toolbar { padding: 8px 6px calc(8px + env(safe-area-inset-bottom)); gap: 5px; }
+            .toolbar button { flex: 1 1 0; min-width: 68px; padding: 10px 4px; font-size: 0.74rem; }
+        }
+        .btn-primary { background: var(--primary) !important; color: white !important; }
+        .btn-kakao { background: #fee500 !important; color: #191919 !important; }
+        .btn-review { background: var(--point-blue) !important; color: white !important; }
+        #reportContainer { padding: 12px 8px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        .page { background: var(--card-bg); width: 100%; max-width: 794px; padding: 18px 13px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
+        .doc-title { text-align: center; font-size: 1.4rem; font-weight: bold; color: var(--primary); padding-bottom: 10px; margin-bottom: 8px; border-bottom: 2px solid var(--primary); }
+        .status-bar { display:flex; justify-content:center; align-items:center; gap:8px; margin-bottom:16px; font-size:0.8rem; flex-wrap:wrap; }
+        .status-badge { padding: 4px 12px; border-radius: 999px; color: white; font-weight: bold; }
+        .status-draft { background: var(--status-draft); }
+        .status-sent { background: var(--status-sent); }
+        .status-done { background: var(--status-done); }
+        table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); margin-bottom: 14px; font-size: 0.85rem; }
+        th, td { border: 1px solid var(--border); padding: 8px 6px; vertical-align: middle; }
+        .label, th { background: #f8f9fa; font-weight: bold; text-align: center; }
+        .center { text-align: center; }
+        input[type=text], input[type=date] { width: 100%; border: 1px solid transparent; padding: 7px 6px; font-size: 0.9rem; background: transparent; border-radius:4px; }
+        input[type=text]:focus, input[type=date]:focus { border: 1px solid var(--point-blue); background: #f0f8ff; outline: none; }
+        .section-title { font-weight: bold; background: #f8f9fa; padding: 10px 12px; margin: 20px 0 10px; border-radius: 8px; font-size: 0.9rem; border-left: 4px solid var(--primary); }
+        .sign-row-container { display: flex; align-items: center; gap: 6px; width: 100%; }
+        .sign-canvas { border: 1px dashed #bbb; background: #fff; border-radius: 4px; flex-grow: 1; height: 48px; cursor: crosshair; touch-action: none; }
+        .clear-sign-btn { font-size: 0.75rem; padding: 8px 8px; background: #e0e0e0; border: none; border-radius: 4px; cursor: pointer; white-space:nowrap; }
+        .worktype-box { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+        .worktype-chip { display: flex; align-items: center; gap: 5px; background: #f8f9fa; border: 1px solid var(--border); border-radius: 20px; padding: 9px 15px; font-size: 0.88rem; cursor: pointer; transition: all 0.15s; user-select:none; }
+        .worktype-chip input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--primary); }
+        .worktype-chip.checked { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .company-confirm-box { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 14px; }
+        .company-confirm-row { display: flex; flex-direction:column; gap: 8px; }
+        .company-confirm-row input[type=text] { border: 1px solid var(--border); border-radius: 6px; width: 100%; padding: 9px; }
+        .common-info { background:#f8f9fa; border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:14px; font-size:0.8rem; line-height:1.65; }
+        .common-info h4 { color: var(--primary); margin: 10px 0 3px; font-size:0.85rem; }
+        .common-info h4:first-child { margin-top:0; }
+        .common-info .ci-block { margin-bottom:4px; }
+        .common-info .ci-empty { color:#999; text-align:center; padding:10px; }
+        .risk-check-row { display:flex; align-items:center; gap:18px; margin-bottom:8px; font-size:0.9rem; flex-wrap:wrap; }
+        .risk-check-row label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+        .risk-check-row input[type=checkbox] { width:19px; height:19px; accent-color: var(--primary); }
+        .risk-hint { color:#888; font-size:0.75rem; margin-bottom:14px; }
+        .step-table th, .step-table td { font-size: 0.78rem; }
+        .step-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 6px; border-radius:6px; }
+        .step-table { min-width: 640px; }
+        .step-table textarea { width:100%; border:1px solid transparent; background:transparent; font-size:0.78rem; font-family:inherit; resize:none; overflow:hidden; padding:4px; min-height:34px; border-radius:4px; }
+        .step-table textarea:focus { border:1px solid var(--point-blue); background:#f0f8ff; outline:none; }
+        .step-table input[type=checkbox] { width:18px; height:18px; accent-color: var(--primary); }
+        .add-step-btn { font-size:0.82rem; padding:9px 12px; background:#eee; border:none; border-radius:6px; cursor:pointer; margin-bottom:14px; width:100%; }
+        .tbm-check-list { display:flex; flex-direction:column; gap:8px; margin-bottom:14px; font-size:0.88rem; }
+        .tbm-check-list label { display:flex; align-items:flex-start; gap:8px; cursor:pointer; padding:4px 0; }
+        .tbm-check-list input[type=checkbox] { width:19px; height:19px; margin-top:1px; accent-color: var(--primary); flex-shrink:0; }
+        .sign-toolbar-row { display:flex; justify-content:flex-end; gap:6px; margin-bottom:8px; }
+        .sign-toolbar-row button { font-size:0.78rem; padding:8px 12px; border:none; border-radius:6px; cursor:pointer; color:#fff; }
+        .btn-add10 { background:#34c759; }
+        .btn-remove10 { background:#ff3b30; }
+        .load-list-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px; }
+        .load-list-box { background:#fff; border-radius:14px; max-width:420px; width:100%; max-height:75vh; overflow-y:auto; padding:16px; }
+        .load-list-box h3 { margin-bottom:10px; color: var(--primary); }
+        .load-list-item { padding:14px 6px; border-bottom:1px solid #eee; cursor:pointer; font-size:0.88rem; }
+        .load-list-item span { color:#888; font-size:0.78rem; }
+        .load-list-close { margin-top:10px; padding:12px; width:100%; border:none; border-radius:8px; background:#eee; font-weight:bold; cursor:pointer; }
+        #toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #1d1d1f; color: white; padding: 11px 18px; border-radius: 10px; font-size: 0.85rem; z-index: 10000; opacity: 0; transition: opacity 0.3s; pointer-events: none; max-width:90%; text-align:center; }
+        #toast.show { opacity: 0.96; }
+        #loadingOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:10001; display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px; }
+        #loadingOverlay.show { display:flex; }
+        .loading-box { background:#fff; border-radius:16px; padding:26px 32px; display:flex; flex-direction:column; align-items:center; gap:14px; box-shadow:0 8px 30px rgba(0,0,0,0.2); }
+        .hourglass { font-size:2.4rem; animation: flip 1.2s infinite ease-in-out; }
+        @keyframes flip { 0%,40%{transform:rotate(0deg);} 50%,90%{transform:rotate(180deg);} 100%{transform:rotate(180deg);} }
+        .loading-text { font-size:0.9rem; font-weight:bold; color:var(--text-main); }
+        .spinner { width:34px; height:34px; border:3px solid #eee; border-top-color:var(--primary); border-radius:50%; animation:spin 0.8s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg);} }
+    </style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<div id="inAppBanner" style="display:none;position:fixed;top:0;left:0;width:100%;background:#ffeb3b;color:#000;padding:10px 12px;z-index:10002;text-align:center;font-size:0.85rem;box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+    카카오톡 브라우저에서는 PDF 저장이 제한됩니다.
+    <button onclick="openInExternalBrowser()" style="margin-left:6px;padding:6px 12px;border:none;border-radius:6px;background:#000;color:#fff;font-weight:bold;">외부 브라우저로 열기</button>
+</div>
+
+<div id="iosHintBanner" style="display:none;position:fixed;top:0;left:0;width:100%;background:#e8f0fe;color:#1d1d1f;padding:10px 12px;z-index:10002;text-align:center;font-size:0.82rem;box-shadow:0 2px 6px rgba(0,0,0,0.1);">
+    아이폰은 자동설치가 안 돼요. 하단 <b>공유(⬆)</b> 버튼 → <b>"홈 화면에 추가"</b>를 눌러주세요.
+    <button onclick="document.getElementById('iosHintBanner').style.display='none'; document.body.style.paddingTop='0';" style="margin-left:6px;padding:5px 10px;border:none;border-radius:6px;background:#1d1d1f;color:#fff;">닫기</button>
+</div>
+
+<div id="loadingOverlay">
+    <div class="loading-box">
+        <div class="hourglass">⏳</div>
+        <div class="loading-text" id="loadingText">처리 중입니다...</div>
+    </div>
+</div>
+
+<div class="toolbar">
+    <button onclick="saveDraft()">💾 임시저장</button>
+    <button onclick="promptLoad()">📂 불러오기</button>
+    <button onclick="shareReport()" class="btn-kakao" id="shareBtn">📤 발송·공유</button>
+    <button onclick="markReviewed()" class="btn-review">✅ 검토완료</button>
+    <button onclick="saveAsPDF()">📄 PDF저장</button>
+    <button onclick="viewPdf()" id="viewPdfBtn" style="display:none;">👁️ PDF보기</button>
+    <button onclick="installApp()" id="installBtn" style="display:none;">📲 앱 설치</button>
+    <button onclick="resetForm()" style="background:#eee;">🆕 신규작성(초기화)</button>
+</div>
+
+<div id="reportContainer">
+    <div class="page" id="page1">
+        <div class="doc-title">안 전 교 육 일 지</div>
+        <div class="status-bar">
+            <span id="statusBadge" class="status-badge status-draft">작성중</span>
+        </div>
+
+        <table>
+            <tr>
+                <td class="label" style="width:26%;">안전교육일</td>
+                <td><input type="date" id="eduDate"></td>
+            </tr>
+            <tr>
+                <td class="label">업체명</td>
+                <td>
+                    <select id="companySelect" onchange="onCompanySelectChange()" style="width:100%;border:1px solid var(--border);border-radius:4px;padding:7px 6px;font-size:0.9rem;background:#fff;">
+                        <option value="">선택하세요</option>
+                        <option value="건국">건국</option>
+                        <option value="보문">보문</option>
+                        <option value="대성기계">대성기계</option>
+                        <option value="재도">재도</option>
+                        <option value="태흥">태흥</option>
+                        <option value="F&amp;G">F&amp;G</option>
+                        <option value="SCT">SCT</option>
+                        <option value="__etc__">기타(직접입력)</option>
+                    </select>
+                    <input type="text" id="companyOther" placeholder="업체명 직접입력" style="display:none;margin-top:6px;">
+                </td>
+            </tr>
+            <tr>
+                <td class="label">작업개요</td>
+                <td><input type="text" id="workSummary" placeholder="작업개요 입력"></td>
+            </tr>
+        </table>
+
+        <div class="section-title">🛠️ 오늘 작업 종류</div>
+        <div class="worktype-box" id="workTypeBox">
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="일반" checked>일반</label>
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="화기">화기</label>
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="밀폐">밀폐</label>
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="전기">전기</label>
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="고소">고소</label>
+            <label class="worktype-chip"><input type="checkbox" class="worktype-cb" value="굴착 및 중장비">굴착 및 중장비</label>
+        </div>
+
+        <div class="section-title">📌 필수안전조치</div>
+        <div class="common-info" id="commonInfo"></div>
+
+        <div class="section-title">⚠️ 위험성평가 실시여부</div>
+        <div class="risk-check-row">
+            <label><input type="checkbox" id="riskYes" onchange="toggleRiskCheck('yes')"> 실시</label>
+            <label><input type="checkbox" id="riskNo" onchange="toggleRiskCheck('no')"> 미실시</label>
+        </div>
+        <div class="risk-hint">(작업절차 마련, 최초 위험성평가 후 동일작업 시 해당)</div>
+
+        <div class="section-title">🔧 작업단계 / 유해위험요인 / 안전조치 / 감소대책</div>
+        <div class="step-table-wrap">
+        <table class="step-table">
+            <thead><tr><th style="width:32px;">구분</th><th style="width:16%;">작업단계</th><th>유해위험요인</th><th>현재 안전 조치</th><th>감소대책</th><th style="width:44px;"></th></tr></thead>
+            <tbody id="stepBody"></tbody>
+        </table>
+        </div>
+        <button class="add-step-btn" onclick="addStepRow()">+ 작업단계 추가</button>
+
+        <div class="section-title">📋 TBM 실시내용</div>
+        <div class="tbm-check-list" id="tbmCheckList">
+            <label><input type="checkbox" class="tbm-cb" checked value="위험성평가·작업지침 수립, 교육하였음">위험성평가·작업지침 수립, 교육하였음</label>
+            <label><input type="checkbox" class="tbm-cb" checked value="공정설비에 대한 위험성 설명하였음">공정설비에 대한 위험성 설명하였음</label>
+            <label><input type="checkbox" class="tbm-cb" checked value="연관 위험물질에 대한 위험성 설명하였음">연관 위험물질에 대한 위험성 설명하였음</label>
+            <label><input type="checkbox" class="tbm-cb" checked value="작업 전·후 정리정돈에 대하여 교육하였음">작업 전·후 정리정돈에 대하여 교육하였음</label>
+            <label><input type="checkbox" class="tbm-cb" checked value="정보보안에 대하여 교육하였음">정보보안에 대하여 교육하였음</label>
+        </div>
+
+        <div class="section-title">✍️ 교육 및 TBM 확인 (성명 + 서명)</div>
+        <div class="sign-toolbar-row">
+            <button class="btn-add10" onclick="changeSignCount(5)">+ 5명</button>
+            <button class="btn-remove10" onclick="changeSignCount(-5)">- 5명</button>
+        </div>
+        <table>
+            <thead><tr><th style="width:40px;">No</th><th style="width:30%;">성명</th><th>서명</th></tr></thead>
+            <tbody id="signBody"></tbody>
+        </table>
+
+        <div class="section-title">🖊️ 공사업체 안전관리자 확인 (위험요인 확인 서명)</div>
+        <div class="company-confirm-box">
+            <div class="company-confirm-row">
+                <input type="text" id="companySignerName" placeholder="공사업체 안전관리자 성명">
+                <div class="sign-row-container">
+                    <canvas class="sign-canvas" id="companySign"></canvas>
+                    <button class="clear-sign-btn" onclick="clearCompanySign()">지우기</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-title">✅ 당사 안전관리자 재확인 서명</div>
+        <div class="company-confirm-box">
+            <div class="company-confirm-row">
+                <input type="text" id="reviewerSignerName" placeholder="당사 안전관리자 성명">
+                <div class="sign-row-container">
+                    <canvas class="sign-canvas" id="reviewerSign"></canvas>
+                    <button class="clear-sign-btn" onclick="clearReviewerSign()">지우기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAFBIfsgJyLXSRTG_O2evBVwU21HjPGaxQ",
+  authDomain: "safety-report-3a05b.firebaseapp.com",
+  projectId: "safety-report-3a05b",
+  storageBucket: "safety-report-3a05b.firebasestorage.app",
+  messagingSenderId: "36848180585",
+  appId: "1:36848180585:web:a77da51916b6d8ccc571f8"
+};
+let db = null;
+try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+} catch (e) { console.error('Firebase 초기화 실패:', e); }
+const COLLECTION = "safety_reports";
+
+let currentDocId = null;
+let deferredInstallPrompt = null;
+let signPads = {};
+let signCount = 10;
+const MIN_SIGN_COUNT = 5;
+let stepRows = [];
+let stepIdSeq = 1;
+
+const SAFETY_DATA = {
+    '일반': [
+        '주요 화학물질 MSDS 확인, 유해위험요소 사전인지',
+        '안전수칙 준수, 안전하지 않으면 작업 금지',
+        '위험성평가 위험요인·결과 숙지 후 안전작업',
+        '지정장소 외 금연 (흡연장소: 복지관 앞 파고라)',
+        '구내 차량 제한속도 10km/h 이하 운행',
+        '정리정돈·청소 완료 후 담당자 확인받고 종료',
+        '비상대피로·피난장소 숙지, 안전관리자 지시 준수',
+        '비상시 비상연락망 참고하여 즉시 조치',
+        '(정보보안) 무단 촬영·저장 등 정보유출 금지',
+        '(정보보안) 통제구역 임의출입·반출 금지'
+    ],
+    '화기': [
+        '불티 비산으로 화재 발생하지 않도록 차단조치',
+        '작업 전 가스농도 측정, 가연성물질 없음 확인'
+    ],
+    '밀폐': [
+        '공기질 측정결과 안전 확인 후 작업 허가',
+        '입회자(감시인) 외부 상주, 출입인원 점검'
+    ],
+    '전기': [
+        '전기시설 관련부서 협조·허가 후 작업 실시',
+        '정전작업 원칙, 곤란시 활선 안전조치 후 작업'
+    ],
+    '고소': [
+        '안전대 착용, 부착설비에 안전고리 걸고 작업',
+        '작업 중 공기구 낙하하지 않도록 주의'
+    ],
+    '굴착 및 중장비': [
+        '매설물 확인, 작업구역·범위 정해 접근 차단',
+        '작업 중단시 경계표주 등으로 출입제한 표시'
+    ]
+};
+
+window.onload = () => {
+    document.getElementById('eduDate').value = new Date().toISOString().split('T')[0];
+    buildSignRows(signCount);
+    setupCompanySignPad();
+    setupReviewerSignPad();
+    setupWorkTypeChips();
+    stepRows = defaultStepRows();
+    renderStepRows();
+    renderCommonInfo();
+    checkInAppBrowser();
+    checkIOSHint();
+
+    const params = new URLSearchParams(location.search);
+    const idFromUrl = params.get('id');
+    if (idFromUrl) loadDoc(idFromUrl);
+};
+
+/* ---------------- 카카오톡 인앱 브라우저 감지 및 외부 브라우저 전환 ---------------- */
+function checkInAppBrowser() {
+    const ua = navigator.userAgent || '';
+    if (/KAKAOTALK/i.test(ua)) {
+        document.getElementById('inAppBanner').style.display = 'block';
+        document.body.style.paddingTop = '54px';
+    }
+}
+function openInExternalBrowser() {
+    const url = location.href;
+    location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(url);
+}
+
+/* ---------------- 앱 설치(PWA) ---------------- */
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    document.getElementById('installBtn').style.display = '';
+});
+async function installApp() {
+    if (!deferredInstallPrompt) {
+        toast('이 브라우저에서는 자동 설치가 지원되지 않습니다. 메뉴에서 "홈 화면에 추가"를 눌러주세요.');
+        return;
+    }
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    document.getElementById('installBtn').style.display = 'none';
+}
+function checkIOSHint() {
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isStandalone = window.navigator.standalone === true;
+    const isKakao = /KAKAOTALK/i.test(ua);
+    if (isIOS && !isStandalone && !isKakao) {
+        document.getElementById('iosHintBanner').style.display = 'block';
+        document.body.style.paddingTop = '54px';
+    }
+}
+
+function showLoading(text) {
+    document.getElementById('loadingText').textContent = text || '처리 중입니다...';
+    document.getElementById('loadingOverlay').classList.add('show');
+}
+function hideLoading() {
+    document.getElementById('loadingOverlay').classList.remove('show');
+}
+
+function setupWorkTypeChips() {
+    document.querySelectorAll('.worktype-chip').forEach(chip => {
+        const cb = chip.querySelector('input');
+        chip.classList.toggle('checked', cb.checked);
+        cb.addEventListener('change', () => {
+            chip.classList.toggle('checked', cb.checked);
+            renderCommonInfo();
+        });
+    });
+}
+function collectWorkTypes() {
+    return Array.from(document.querySelectorAll('.worktype-cb:checked')).map(cb => cb.value);
+}
+function applyWorkTypes(list) {
+    if (!list) list = ['일반'];
+    document.querySelectorAll('.worktype-chip').forEach(chip => {
+        const cb = chip.querySelector('input');
+        cb.checked = list.includes(cb.value);
+        chip.classList.toggle('checked', cb.checked);
+    });
+    renderCommonInfo();
+}
+
+/* ---------------- 업체명 (기본 목록 + 기타 직접입력) ---------------- */
+const PRESET_COMPANIES = ['건국', '보문', '대성기계', '재도', '태흥', 'F&G', 'SCT'];
+function onCompanySelectChange() {
+    const sel = document.getElementById('companySelect');
+    const other = document.getElementById('companyOther');
+    other.style.display = (sel.value === '__etc__') ? 'block' : 'none';
+    if (sel.value === '__etc__') other.focus();
+}
+function getCompanyValue() {
+    const sel = document.getElementById('companySelect');
+    if (sel.value === '__etc__') return document.getElementById('companyOther').value.trim();
+    return sel.value;
+}
+function setCompanyValue(val) {
+    const sel = document.getElementById('companySelect');
+    const other = document.getElementById('companyOther');
+    if (!val) { sel.value = ''; other.value = ''; other.style.display = 'none'; return; }
+    if (PRESET_COMPANIES.includes(val)) {
+        sel.value = val; other.value = ''; other.style.display = 'none';
+    } else {
+        sel.value = '__etc__'; other.value = val; other.style.display = 'block';
+    }
+}
+
+function renderCommonInfo() {
+    const selected = collectWorkTypes();
+    const box = document.getElementById('commonInfo');
+    if (selected.length === 0) {
+        box.innerHTML = '<div class="ci-empty">작업 종류를 선택하면 해당 필수안전조치가 표시됩니다.</div>';
+        return;
+    }
+    let html = '';
+    selected.forEach(type => {
+        const items = SAFETY_DATA[type];
+        if (!items) return;
+        html += `<div class="ci-block"><h4>${escapeHtml(type)}</h4>`;
+        items.forEach(it => { html += `· ${escapeHtml(it)}<br>`; });
+        html += `</div>`;
+    });
+    box.innerHTML = html;
+}
+
+function toggleRiskCheck(which) {
+    const yes = document.getElementById('riskYes'), no = document.getElementById('riskNo');
+    if (which === 'yes' && yes.checked) no.checked = false;
+    if (which === 'no' && no.checked) yes.checked = false;
+}
+function collectRiskAssessment() {
+    if (document.getElementById('riskYes').checked) return 'yes';
+    if (document.getElementById('riskNo').checked) return 'no';
+    return null;
+}
+function applyRiskAssessment(val) {
+    document.getElementById('riskYes').checked = (val === 'yes');
+    document.getElementById('riskNo').checked = (val === 'no');
+}
+
+function defaultStepRows() {
+    return [
+        {id: stepIdSeq++, checked:true, step:'작업 전 준비 및 교육', hazard:'작업자 건강상태 불량 및 위험성 인식 부족 상해', measure:'작업자 컨디션 확인', reduction:'작업 부적합 인원 미투입'},
+        {id: stepIdSeq++, checked:true, step:'작업구역 설정', hazard:'작업자 외 인원 출입, 자재/공구장비 상해', measure:'장비/공구 작동상태·규격 확인', reduction:'필요 미부착 장비/공구 반출'},
+        {id: stepIdSeq++, checked:true, step:'수 작업_설비 반입', hazard:'설비 Casing 분리/해체시 손가락 협착', measure:'공도구·Chain Block 이용 서서히 분리', reduction:'해체 전 작업내용/방법 재확인 후 실시'},
+        {id: stepIdSeq++, checked:true, step:'수 작업_설비 지재 준비', hazard:'차량 적재·하차시 협착·끼임 인체 상해', measure:'협착/끼임 없도록 적정공구 사용', reduction:'손잡이·갈고리·진공빨판 등 보조도구 사용'},
+        {id: stepIdSeq++, checked:true, step:'정리정돈', hazard:'작업 후 정리정돈 미흡 전도 상해', measure:'Oil 즉시 제거, 폐기물 지정장소 폐기', reduction:''}
+    ];
+}
+function escapeHtml(str) {
+    return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function renderStepRows() {
+    const tbody = document.getElementById('stepBody');
+    tbody.innerHTML = stepRows.map(r => `
+        <tr data-id="${r.id}">
+            <td class="center"><input type="checkbox" ${r.checked?'checked':''} onchange="updateStepField(${r.id},'checked',this.checked)"></td>
+            <td><textarea oninput="updateStepField(${r.id},'step',this.value);autoGrow(this)">${escapeHtml(r.step)}</textarea></td>
+            <td><textarea oninput="updateStepField(${r.id},'hazard',this.value);autoGrow(this)">${escapeHtml(r.hazard)}</textarea></td>
+            <td><textarea oninput="updateStepField(${r.id},'measure',this.value);autoGrow(this)">${escapeHtml(r.measure)}</textarea></td>
+            <td><textarea oninput="updateStepField(${r.id},'reduction',this.value);autoGrow(this)">${escapeHtml(r.reduction)}</textarea></td>
+            <td class="center"><button class="clear-sign-btn" onclick="deleteStepRow(${r.id})">삭제</button></td>
+        </tr>`).join('');
+    tbody.querySelectorAll('textarea').forEach(autoGrow);
+}
+function autoGrow(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+function updateStepField(id, field, value) { const row = stepRows.find(r => r.id === id); if (row) row[field] = value; }
+function addStepRow() { stepRows.push({id: stepIdSeq++, checked:false, step:'', hazard:'', measure:'', reduction:''}); renderStepRows(); }
+function deleteStepRow(id) { stepRows = stepRows.filter(r => r.id !== id); renderStepRows(); }
+function collectStepRows() { return stepRows; }
+function applyStepRows(list) {
+    stepRows = (list && list.length) ? list.map(r => ({...r, id: stepIdSeq++})) : defaultStepRows();
+    renderStepRows();
+}
+
+function collectTbmChecked() { return Array.from(document.querySelectorAll('.tbm-cb:checked')).map(cb => cb.value); }
+function applyTbmChecked(list) {
+    if (!list) return;
+    document.querySelectorAll('.tbm-cb').forEach(cb => { cb.checked = list.includes(cb.value); });
+}
+
+function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function buildSignRows(count) {
+    Object.keys(signPads).forEach(k => { if (!isNaN(k) && Number(k) > count) delete signPads[k]; });
+    const tbody = document.getElementById('signBody'); tbody.innerHTML = '';
+    for (let i = 1; i <= count; i++) {
+        tbody.innerHTML += `<tr><td class="center">${i}</td><td><input type="text" id="name${i}"></td><td><div class="sign-row-container"><canvas class="sign-canvas" id="sign${i}"></canvas><button class="clear-sign-btn" onclick="clearOneSign(${i})">지우기</button></div></td></tr>`;
+    }
+    setTimeout(() => { for (let i = 1; i <= count; i++) setupSignPad(i); }, 100);
+}
+function attachSignEvents(cv, ctx) {
+    let dr = false;
+    const getP = e => { const r=cv.getBoundingClientRect(); const cx=e.touches?e.touches[0].clientX:e.clientX; const cy=e.touches?e.touches[0].clientY:e.clientY; return {x:cx-r.left, y:cy-r.top}; };
+    ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
+    cv.onmousedown=cv.ontouchstart=e=>{e.preventDefault();dr=true;ctx.beginPath();ctx.moveTo(getP(e).x,getP(e).y);};
+    cv.onmousemove=cv.ontouchmove=e=>{if(!dr)return;e.preventDefault();ctx.lineTo(getP(e).x,getP(e).y);ctx.stroke();};
+    cv.onmouseup=cv.ontouchend=()=>{dr=false;};
+}
+function setupSignPad(id) {
+    const cv = document.getElementById('sign'+id); if(!cv) return;
+    cv.width = cv.offsetWidth; cv.height = cv.offsetHeight;
+    const ctx = cv.getContext('2d'); signPads[id] = {canvas:cv, ctx:ctx};
+    attachSignEvents(cv, ctx);
+}
+function clearOneSign(id) { if(signPads[id]) signPads[id].ctx.clearRect(0,0,signPads[id].canvas.width,signPads[id].canvas.height); }
+
+function changeSignCount(delta) {
+    const savedNames = {}, savedSigs = {};
+    for (let i = 1; i <= signCount; i++) {
+        const nameEl = document.getElementById('name'+i);
+        if (nameEl) savedNames[i] = nameEl.value;
+        if (signPads[i] && !isCanvasBlank(signPads[i].canvas)) savedSigs[i] = signPads[i].canvas.toDataURL('image/png');
+    }
+    signCount = Math.max(MIN_SIGN_COUNT, signCount + delta);
+    buildSignRows(signCount);
+    setTimeout(() => {
+        Object.keys(savedNames).forEach(i => {
+            if (Number(i) <= signCount) { const el = document.getElementById('name'+i); if (el) el.value = savedNames[i]; }
+        });
+        Object.keys(savedSigs).forEach(i => {
+            if (Number(i) <= signCount && signPads[i]) {
+                const img = new Image();
+                img.onload = () => signPads[i].ctx.drawImage(img, 0, 0, signPads[i].canvas.width, signPads[i].canvas.height);
+                img.src = savedSigs[i];
+            }
+        });
+    }, 160);
+}
+
+function setupCompanySignPad() {
+    const cv = document.getElementById('companySign'); cv.width = cv.offsetWidth; cv.height = cv.offsetHeight;
+    const ctx = cv.getContext('2d'); signPads['company'] = {canvas:cv, ctx:ctx};
+    attachSignEvents(cv, ctx);
+}
+function clearCompanySign() { if(signPads['company']) signPads['company'].ctx.clearRect(0,0,signPads['company'].canvas.width,signPads['company'].canvas.height); }
+
+function setupReviewerSignPad() {
+    const cv = document.getElementById('reviewerSign'); cv.width = cv.offsetWidth; cv.height = cv.offsetHeight;
+    const ctx = cv.getContext('2d'); signPads['reviewer'] = {canvas:cv, ctx:ctx};
+    attachSignEvents(cv, ctx);
+}
+function clearReviewerSign() { if(signPads['reviewer']) signPads['reviewer'].ctx.clearRect(0,0,signPads['reviewer'].canvas.width,signPads['reviewer'].canvas.height); }
+
+function compressSignature(canvas) {
+    const tmp = document.createElement('canvas');
+    const targetW = 200;
+    const ratio = canvas.height / canvas.width;
+    tmp.width = targetW;
+    tmp.height = Math.round(targetW * ratio);
+    const tctx = tmp.getContext('2d');
+    tctx.fillStyle = '#fff';
+    tctx.fillRect(0, 0, tmp.width, tmp.height);
+    tctx.drawImage(canvas, 0, 0, tmp.width, tmp.height);
+    return tmp.toDataURL('image/jpeg', 0.5);
+}
+function collectSignatures() {
+    const sigs = {};
+    Object.keys(signPads).forEach(key => {
+        const pad = signPads[key];
+        if (pad && !isCanvasBlank(pad.canvas)) {
+            sigs[key] = compressSignature(pad.canvas);
+        }
+    });
+    return sigs;
+}
+function restoreSignatures(sigs) {
+    if (!sigs) return;
+    Object.keys(sigs).forEach(i => {
+        const pad = signPads[i];
+        if (!pad) return;
+        const img = new Image();
+        img.onload = () => pad.ctx.drawImage(img, 0, 0, pad.canvas.width, pad.canvas.height);
+        img.src = sigs[i];
+    });
+}
+function isCanvasBlank(canvas) {
+    const ctx = canvas.getContext('2d');
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < pixels.length; i += 4) { if (pixels[i] !== 0) return false; }
+    return true;
+}
+
+function collectFormData() {
+    const names = {};
+    for (let i = 1; i <= signCount; i++) { const el = document.getElementById('name'+i); if (el && el.value.trim()) names[i] = el.value; }
+    return {
+        eduDate: document.getElementById('eduDate').value,
+        company: getCompanyValue(),
+        workSummary: document.getElementById('workSummary').value,
+        workTypes: collectWorkTypes(),
+        riskAssessment: collectRiskAssessment(),
+        stepRows: collectStepRows(),
+        tbmChecked: collectTbmChecked(),
+        signCount: signCount,
+        companySignerName: document.getElementById('companySignerName').value,
+        reviewerSignerName: document.getElementById('reviewerSignerName').value,
+        names: names,
+        signatures: collectSignatures()
+    };
+}
+function applyFormData(data) {
+    if (!data) return;
+    document.getElementById('eduDate').value = data.eduDate || '';
+    setCompanyValue(data.company || '');
+    document.getElementById('workSummary').value = data.workSummary || '';
+    document.getElementById('companySignerName').value = data.companySignerName || '';
+    document.getElementById('reviewerSignerName').value = data.reviewerSignerName || '';
+    applyWorkTypes(data.workTypes);
+    applyRiskAssessment(data.riskAssessment);
+    applyStepRows(data.stepRows);
+    applyTbmChecked(data.tbmChecked);
+    signCount = data.signCount || MIN_SIGN_COUNT;
+    buildSignRows(signCount);
+    setTimeout(() => {
+        if (data.names) Object.keys(data.names).forEach(i => {
+            const el = document.getElementById('name'+i);
+            if (el) el.value = data.names[i];
+        });
+        restoreSignatures(data.signatures);
+    }, 200);
+}
+
+/* ---------------- 신규작성(초기화) ---------------- */
+function resetForm() {
+    if (!confirm('작성 중인 내용이 모두 지워지고 새 문서로 시작합니다. 계속할까요?')) return;
+
+    currentDocId = null;
+
+    document.getElementById('eduDate').value = new Date().toISOString().split('T')[0];
+    setCompanyValue('');
+    document.getElementById('workSummary').value = '';
+    document.getElementById('companySignerName').value = '';
+    document.getElementById('reviewerSignerName').value = '';
+
+    applyWorkTypes(['일반']);
+    applyRiskAssessment(null);
+    stepRows = defaultStepRows();
+    renderStepRows();
+    document.querySelectorAll('.tbm-cb').forEach(cb => { cb.checked = true; });
+
+    signCount = 10;
+    buildSignRows(signCount);
+    clearCompanySign();
+    clearReviewerSign();
+
+    setStatusUI('draft');
+    document.getElementById('viewPdfBtn').style.display = 'none';
+
+    history.replaceState(null, '', location.pathname);
+
+    toast('새 문서로 초기화되었습니다.');
+}
+
+function setStatusUI(status) {
+    const badge = document.getElementById('statusBadge');
+    const map = { draft: ['작성중','status-draft'], sent: ['발송·공유됨','status-sent'], reviewed: ['검토완료','status-done'] };
+    const [label, cls] = map[status] || map.draft;
+    badge.textContent = label;
+    badge.className = 'status-badge ' + cls;
+    document.getElementById('viewPdfBtn').style.display = (status === 'reviewed') ? 'block' : 'none';
+    const shareBtn = document.getElementById('shareBtn');
+    shareBtn.disabled = (status === 'reviewed');
+    shareBtn.title = (status === 'reviewed') ? '검토완료된 문서는 재발송할 수 없습니다.' : '';
+}
+
+async function saveDraft() {
+    showLoading('임시 저장 중...');
+    try { await persist('draft'); toast('임시 저장되었습니다.'); }
+    finally { hideLoading(); }
+}
+
+async function shareReport() {
+    if (document.getElementById('shareBtn').disabled) {
+        toast('검토완료된 문서는 재발송할 수 없습니다.');
+        return;
+    }
+    const companySign = signPads['company'];
+    const isBlank = !companySign || isCanvasBlank(companySign.canvas);
+    if (!document.getElementById('companySignerName').value.trim() || isBlank) {
+        toast('공사업체 안전관리자 성명과 위험요인 확인 서명을 입력해주세요.');
+        return;
+    }
+    showLoading('저장 후 공유 준비 중...');
+    try {
+        await persist('sent');
+        const url = buildShareUrl(currentDocId);
+        const title = '안전교육일지 - ' + (getCompanyValue() || '');
+        hideLoading();
+
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: title, text: '안전교육일지를 확인해주세요.\n' + url, url: url });
+                return;
+            } catch (e) { }
+        }
+        try {
+            await navigator.clipboard.writeText(url);
+            toast('링크가 복사되었습니다. 카톡/문자에 붙여넣어 전송하세요.');
+        } catch (e) {
+            prompt('아래 링크를 복사해서 공유하세요:', url);
+        }
+    } catch (err) {
+        console.error(err);
+        toast('발송·공유 중 오류가 발생했습니다.');
+    } finally { hideLoading(); }
+}
+
+async function markReviewed() {
+    if (!currentDocId) { toast('먼저 불러오기로 문서를 여세요.'); return; }
+    const reviewerSign = signPads['reviewer'];
+    const isBlank = !reviewerSign || isCanvasBlank(reviewerSign.canvas);
+    if (!document.getElementById('reviewerSignerName').value.trim() || isBlank) {
+        toast('당사 안전관리자 성명과 재확인 서명을 입력해주세요.');
+        return;
+    }
+    showLoading('검토완료 저장 중...');
+    try {
+        await persist('reviewed');
+        toast('검토완료로 저장되었습니다. PDF보기로 열람/보관하세요.');
+    } catch (e) {
+        console.error(e); toast('검토완료 저장 중 오류가 발생했습니다.');
+    } finally { hideLoading(); }
+}
+
+async function persist(status) {
+    if (!db) { toast('Firebase에 연결되지 않았습니다.'); throw new Error('no db'); }
+    const data = collectFormData();
+    data.status = status;
+    data.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+    data.expireAt = firebase.firestore.Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
+    if (currentDocId) {
+        await db.collection(COLLECTION).doc(currentDocId).set(data, { merge: true });
+    } else {
+        data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        const ref = await db.collection(COLLECTION).add(data);
+        currentDocId = ref.id;
+    }
+    setStatusUI(status);
+}
+
 /* ---------------- 📂 불러오기 (공사업체 선택 -> 일자 선택) ---------------- */
 async function promptLoad() {
     if (!db) { toast('Firebase에 연결되지 않았습니다.'); return; }
@@ -112,3 +859,103 @@ function showDateList(companyName, docList, docsByCompany) {
     overlay.onclick = (e) => { if (e.target === overlay) document.body.removeChild(overlay); };
     document.body.appendChild(overlay);
 }
+
+async function loadDoc(id) {
+    if (!db) { toast('Firebase에 연결되지 않았습니다.'); return; }
+    showLoading('문서 불러오는 중...');
+    try {
+        const snap = await db.collection(COLLECTION).doc(id).get();
+        if (!snap.exists) { toast('문서를 찾을 수 없습니다.'); return; }
+        const data = snap.data();
+        currentDocId = id;
+        applyFormData(data);
+        setStatusUI(data.status || 'draft');
+        toast('문서를 불러왔습니다.');
+    } catch (err) {
+        console.error(err); toast('불러오기 실패.');
+    } finally { hideLoading(); }
+}
+
+function buildShareUrl(id) {
+    const base = location.origin + location.pathname;
+    return base + '?id=' + id;
+}
+
+async function generatePdf(scale) {
+    const wrap = document.querySelector('.step-table-wrap');
+    const prevOverflow = wrap ? wrap.style.overflow : null;
+    if (wrap) wrap.style.overflow = 'visible';
+
+    const hiddenRows = [];
+    for (let i = 1; i <= signCount; i++) {
+        const nameEl = document.getElementById('name' + i);
+        const pad = signPads[i];
+        const isEmpty = (!nameEl || !nameEl.value.trim()) && (!pad || isCanvasBlank(pad.canvas));
+        if (isEmpty && nameEl) {
+            const row = nameEl.closest('tr');
+            if (row) { row.style.display = 'none'; hiddenRows.push(row); }
+        }
+    }
+
+    const canvas = await html2canvas(document.getElementById('page1'), {
+        scale: scale || 2,
+        useCORS: true,
+        windowWidth: 900
+    });
+
+    hiddenRows.forEach(row => { row.style.display = ''; });
+    if (wrap) wrap.style.overflow = prevOverflow;
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    const pageWidth = 210;
+    const pageHeight = 297;
+    const margin = 6;
+    const contentWidth = pageWidth - margin * 2;
+    const contentHeight = pageHeight - margin * 2;
+
+    const imgData = canvas.toDataURL('image/png');
+    const imgWidthMm = contentWidth;
+    const imgHeightMm = canvas.height * imgWidthMm / canvas.width;
+
+    let heightLeft = imgHeightMm;
+    let position = 0;
+
+    pdf.addImage(imgData, 'PNG', margin, margin + position, imgWidthMm, imgHeightMm);
+    heightLeft -= contentHeight;
+
+    while (heightLeft > 0) {
+        position -= contentHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', margin, margin + position, imgWidthMm, imgHeightMm);
+        heightLeft -= contentHeight;
+    }
+    return pdf;
+}
+function buildFileName(ext) {
+    const eduDate = document.getElementById('eduDate').value || '날짜미상';
+    const companyName = getCompanyValue() || '업체명미상';
+    return `${eduDate}.${companyName}.안전일지.${ext}`;
+}
+async function saveAsPDF() {
+    showLoading('PDF 생성 중...');
+    try {
+        const pdf = await generatePdf(2);
+        pdf.save(buildFileName('pdf'));
+    } catch (e) { console.error(e); toast('PDF 생성 오류'); }
+    finally { hideLoading(); }
+}
+async function viewPdf() {
+    showLoading('PDF 여는 중...');
+    try {
+        const pdf = await generatePdf(2);
+        const blobUrl = pdf.output('bloburl');
+        window.open(blobUrl, '_blank');
+    } catch (e) { console.error(e); toast('PDF 열기 오류'); }
+    finally { hideLoading(); }
+}
+</script>
+
+</body>
+</html>
